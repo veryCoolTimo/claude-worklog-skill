@@ -1,0 +1,24 @@
+# === Secrets — NEVER commit (this repo is public) ===
+service-account*.json
+**/service-account*.json
+config.json
+*.key
+*.pem
+.env
+
+# === Worklog runtime / local state ===
+pending.jsonl
+.claude/worklog.local.json
+
+# === Python ===
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# === OS / editor ===
+.DS_Store
+.idea/
+.vscode/
