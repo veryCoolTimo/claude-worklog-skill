@@ -1,8 +1,9 @@
 from worklog import cli, store
+from worklog.layout import parse_entries
 from worklog.sheets import FakeBackend
 
 
-def test_add_creates_row_with_injected_backend(worklog_home, capsys):
+def test_add_creates_formatted_sheet(worklog_home, capsys):
     backend = FakeBackend()
     rc = cli.main(
         ["add", "--project", "content.fans", "--hours", "2", "--text", "did X",
@@ -10,9 +11,12 @@ def test_add_creates_row_with_injected_backend(worklog_home, capsys):
         backend=backend,
     )
     assert rc == 0
-    assert backend.rows[1] == ["12.06.2026", 2.0, "did X", "content.fans"]
-    out = capsys.readouterr().out
-    assert "created" in out
+    col0 = [r[0] for r in backend.get_all_values()]
+    assert "JUNE 2026" in col0
+    assert "GRAND TOTAL" in col0
+    entries = parse_entries(backend.get_all_values())
+    assert entries[0] == {"date": "12.06.2026", "hours": 2.0, "text": "did X", "project": "content.fans"}
+    assert "created" in capsys.readouterr().out
 
 
 def test_add_dry_run_does_not_write(worklog_home, capsys):
@@ -23,7 +27,7 @@ def test_add_dry_run_does_not_write(worklog_home, capsys):
         backend=backend,
     )
     assert rc == 0
-    assert len(backend.rows) == 1  # header only
+    assert backend.get_all_values() == [["Date", "Hours", "What I did", "Project"]]
     assert "dry-run" in capsys.readouterr().out
 
 
@@ -46,8 +50,21 @@ def test_flush_replays_pending(worklog_home, capsys):
     backend = FakeBackend()
     rc = cli.main(["flush"], backend=backend)
     assert rc == 0
-    assert backend.rows[1] == ["12.06.2026", 1.0, "y", "p"]
+    entries = parse_entries(backend.get_all_values())
+    assert entries[0]["text"] == "y"
     assert store.read_pending() == []
+
+
+def test_show_prints_only_rows_for_date(worklog_home, capsys):
+    backend = FakeBackend()
+    cli.main(["add", "--project", "p", "--hours", "1", "--text", "today",
+              "--date", "12.06.2026"], backend=backend)
+    cli.main(["add", "--project", "p", "--hours", "1", "--text", "yesterday",
+              "--date", "11.06.2026"], backend=backend)
+    capsys.readouterr()  # clear
+    cli.main(["show", "--date", "12.06.2026"], backend=backend)
+    out = capsys.readouterr().out
+    assert "today" in out and "yesterday" not in out
 
 
 def test_init_subcommand(worklog_home, tmp_path, capsys, monkeypatch):

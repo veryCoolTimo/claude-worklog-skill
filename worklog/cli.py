@@ -2,8 +2,8 @@ import argparse
 from pathlib import Path
 
 from worklog import config, store
-from worklog.core import upsert
 from worklog.dates import today_str, format_hours, parse_hours
+from worklog.layout import record, parse_entries
 from worklog.project import resolve_project, init_project
 from worklog.sheets import open_worksheet
 
@@ -42,7 +42,7 @@ def cmd_add(args, cfg, backend, backend_factory):
         print(f"Could not reach Google Sheets ({exc}); entry buffered for later flush.")
         return 0
 
-    action, _ = upsert(b, date, hours, args.text, project)
+    action = record(b, date, hours, args.text, project)
     print(f"{action}: {date} | {format_hours(hours)} | {args.text} | {project}")
     return 0
 
@@ -58,7 +58,7 @@ def cmd_flush(args, cfg, backend, backend_factory):
         print(f"Still cannot reach Google Sheets ({exc}); kept {len(pending)} buffered.")
         return 1
     for e in pending:
-        upsert(b, e["date"], parse_hours(e["hours"]), e["text"], e["project"])
+        record(b, e["date"], parse_hours(e["hours"]), e["text"], e["project"])
     store.clear_pending()
     print(f"Flushed {len(pending)} entr{'y' if len(pending) == 1 else 'ies'}.")
     return 0
@@ -71,9 +71,9 @@ def cmd_show(args, cfg, backend, backend_factory):
     except Exception as exc:
         print(f"Could not reach Google Sheets ({exc}).")
         return 1
-    for row in b.get_all_values()[1:]:
-        if row and row[0] == date:
-            print(" | ".join(str(c) for c in row))
+    for e in parse_entries(b.get_all_values()):
+        if e["date"] == date:
+            print(f'{e["date"]} | {format_hours(e["hours"])} | {e["text"]} | {e["project"]}')
     return 0
 
 

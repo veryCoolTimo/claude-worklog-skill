@@ -13,8 +13,10 @@ Claude in a work project
   ├─ Skill `worklog` (brain): resolve project, summarize work, estimate hours, confirm row
   └─ worklog CLI (engine, Python + gspread)
        • upsert by (date, project): exists → hours += , text appended; else → new row
+       • regenerates the whole formatted sheet: MONTH YEAR headers, per-month totals,
+         GRAND TOTAL — data rows are the single source of truth
        └─ service account ▼
-   Google Sheet:  [Log] flat journal  ──SUMIF──▶  [Report] monthly view + totals
+   Google Sheet: one formatted timesheet (month blocks + totals), exactly like the manual one
 ```
 
 - **Hours** are Claude's effort estimate by volume of work (rounded to 0.5), not wall-clock.

@@ -9,22 +9,21 @@
 6. Copy the service account **email** (looks like `name@project.iam.gserviceaccount.com`).
 
 ## 2. The spreadsheet
+The engine maintains a **single formatted sheet** — it inserts the `MONTH YEAR` headers,
+the per-month total rows, and the `GRAND TOTAL` itself, regenerating them on every write.
+You do **not** create a separate report tab or any formulas.
+
 1. Create a Google Sheet. Copy its ID from the URL
    (`https://docs.google.com/spreadsheets/d/<THIS>/edit`).
-2. Add a tab named **`Log`** with header row: `Date | Hours | What I did | Project`.
-3. Add a **`Report`** tab that aggregates `Log` by month with `SUMIF` totals (template
-   formulas below).
-4. **Share** the spreadsheet with the service account email as **Editor**.
-5. Put the ID into `~/.config/worklog/config.json` → `spreadsheet_id`.
-6. (RU comma decimals) File → Settings → Locale → a comma-decimal locale, so `0.5`
+2. Name the tab **`Log`** (must match `log_tab` in `config.json`). Leave it empty — the
+   engine writes the header row and everything else on the first `worklog add`.
+3. **Share** the spreadsheet with the service account email as **Editor**.
+4. Put the ID into `~/.config/worklog/config.json` → `spreadsheet_id`.
+5. (RU comma decimals) File → Settings → Locale → a comma-decimal locale, so `0.5`
    shows as `0,5`.
 
-### Report tab formulas (one-time)
-- Total hours: `=SUM(Log!B2:B)`.
-- Per-project total: `=SUMIF(Log!D:D, A2, Log!B:B)` (with the project name in `A2`).
-- Per-month total: easiest via a Pivot table (Insert → Pivot table) over `Log`, grouped by
-  month (group the Date field) and Project, summing Hours — this reproduces the manual
-  monthly-totals report exactly.
+> Do not hand-edit the `MONTH YEAR`, `… total`, or `GRAND TOTAL` rows — they are derived
+> from the data rows and rebuilt on each write. Edit only the daily data rows if you must.
 
 ## 3. Install
 Run `./install.sh`, then add `worklog` to PATH and register the hook (below).

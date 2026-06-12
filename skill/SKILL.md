@@ -40,4 +40,6 @@ Record what was accomplished this session into the Google Sheet timesheet via th
 - Hours are an **effort estimate**, not wall-clock. Round to 0.5, minimum 0.5.
 - Same project, same day → the engine accumulates hours and appends text. Don't create a
   second row yourself.
-- Never edit the `Report` tab or totals — those are formulas.
+- The sheet is a single formatted timesheet: the engine writes the `MONTH YEAR` headers,
+  per-month total rows, and `GRAND TOTAL` automatically (regenerated on every write). Never
+  edit those rows by hand and never add them via the CLI — just `worklog add` data.

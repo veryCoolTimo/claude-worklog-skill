@@ -1,4 +1,5 @@
-from worklog.core import HEADERS, upsert
+from worklog.core import HEADERS
+from worklog.layout import record, parse_entries
 from worklog.sheets import FakeBackend
 
 
@@ -7,14 +8,17 @@ def test_fake_backend_starts_with_header():
     assert b.get_all_values() == [HEADERS]
 
 
-def test_fake_backend_supports_upsert_roundtrip():
+def test_fake_backend_replace_all():
     b = FakeBackend()
-    upsert(b, "12.06.2026", 2.0, "did X", "content.fans")
-    vals = b.get_all_values()
-    assert vals[1] == ["12.06.2026", 2.0, "did X", "content.fans"]
+    b.replace_all([HEADERS, ["12.06.2026", 1.0, "x", "p"]])
+    assert b.get_all_values()[1] == ["12.06.2026", 1.0, "x", "p"]
 
 
-def test_fake_backend_seeded_rows():
-    seed = [HEADERS[:], ["11.06.2026", 1.0, "old", "p"]]
-    b = FakeBackend(seed)
-    assert len(b.get_all_values()) == 2
+def test_record_roundtrip_through_fake_backend():
+    b = FakeBackend()
+    record(b, "12.06.2026", 2.0, "did X", "content.fans")
+    entries = parse_entries(b.get_all_values())
+    assert len(entries) == 1
+    assert entries[0]["date"] == "12.06.2026"
+    assert entries[0]["hours"] == 2.0
+    assert entries[0]["project"] == "content.fans"

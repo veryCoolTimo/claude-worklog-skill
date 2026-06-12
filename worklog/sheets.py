@@ -6,16 +6,13 @@ class FakeBackend:
     """In-memory backend for tests and --dry-run."""
 
     def __init__(self, rows=None):
-        self.rows = [r[:] for r in rows] if rows else [HEADERS[:]]
+        self.rows = [list(r) for r in rows] if rows else [HEADERS[:]]
 
     def get_all_values(self):
-        return [r[:] for r in self.rows]
+        return [list(r) for r in self.rows]
 
-    def append_row(self, row):
-        self.rows.append(list(row))
-
-    def update_row(self, idx, row):
-        self.rows[idx] = list(row)
+    def replace_all(self, rows):
+        self.rows = [list(r) for r in rows]
 
 
 class GspreadBackend:
@@ -27,16 +24,14 @@ class GspreadBackend:
     def get_all_values(self):
         return self.ws.get_all_values()
 
-    def append_row(self, row):
-        self.ws.append_row(row, value_input_option="USER_ENTERED")
-
-    def update_row(self, idx, row):
-        # idx is 0-based incl header; sheet rows are 1-based
-        self.ws.update(f"A{idx + 1}:D{idx + 1}", [row], value_input_option="USER_ENTERED")
+    def replace_all(self, rows):
+        # Regenerate the whole sheet: clear values, then write from A1.
+        self.ws.clear()
+        self.ws.update(range_name="A1", values=rows, value_input_option="USER_ENTERED")
 
 
 def open_worksheet(cfg=None):
-    """Open the Log worksheet via service-account auth. Raises on missing creds/network."""
+    """Open the timesheet worksheet via service-account auth. Raises on missing creds/network."""
     import gspread
     from google.oauth2.service_account import Credentials
 

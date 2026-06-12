@@ -152,4 +152,19 @@ deploys, investigations). Existing same-day row → append with `; `, no duplica
 - Maintaining month-separator rows / totals by code (handled by Report formulas).
 - A custom MCP server.
 - Multi-user / shared-team timesheets.
+
+## Addendum 2026-06-12 — single-sheet layout (supersedes flat Log + Report)
+
+Per the user's choice, the engine maintains **one formatted sheet** that reproduces the
+manual timesheet exactly — `MONTH YEAR` headers, per-month total rows (`March total | 19 |
+10 days`), and a `GRAND TOTAL | … | N active days`. The earlier "flat `Log` + auto
+`Report`" split is dropped.
+
+Implementation (robust, not fragile in-place insertion): the **data rows are the single
+source of truth**. On each write the engine (`worklog/layout.py`) parses out the data rows
+(first cell matches `DD.MM.YYYY`), merges the new entry, and **regenerates the entire
+layout** (`render()`), then overwrites the sheet (`backend.replace_all`). Month/total/grand
+rows are derived, never parsed back in. "Active days" = count of distinct dates. Same
+(date, project) accumulates hours and appends text. Setup needs only one tab named `Log`
+(no Report tab, no formulas).
 ```
