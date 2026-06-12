@@ -36,10 +36,21 @@ All commands support `--dry-run`.
 
 ## Status
 
-🚧 In development. See the design spec:
-[`docs/superpowers/specs/2026-06-12-worklog-skill-design.md`](docs/superpowers/specs/2026-06-12-worklog-skill-design.md).
+Engine, skill, and hook implemented and unit-tested (`pytest` — 28 tests). Pending: the
+one-time Google Cloud setup (service account + shared sheet).
+
+- Design spec: [`docs/superpowers/specs/2026-06-12-worklog-skill-design.md`](docs/superpowers/specs/2026-06-12-worklog-skill-design.md)
+- Implementation plan: [`docs/superpowers/plans/2026-06-12-worklog-skill.md`](docs/superpowers/plans/2026-06-12-worklog-skill.md)
 
 ## Setup
 
-Setup (Google Cloud service account, sheet template, skill install) is documented in the
-implementation plan — coming soon.
+See [`docs/SETUP.md`](docs/SETUP.md) — Google Cloud service account, sheet template
+(`Log` + `Report`), `./install.sh`, and SessionStart hook registration.
+
+## Development
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"
+pytest -q
+```
