@@ -1,0 +1,19 @@
+[project]
+name = "worklog"
+version = "0.1.0"
+description = "Claude Code skill engine: log work to a Google Sheet timesheet"
+requires-python = ">=3.11"
+dependencies = ["gspread>=6.0", "google-auth>=2.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+worklog = "worklog.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["worklog*"]
