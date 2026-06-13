@@ -35,6 +35,21 @@ Record what was accomplished this session into the Google Sheet timesheet via th
 6. If the engine says the entry was **buffered** (offline), tell the user; it will flush
    on the next `worklog flush` or next successful `add`.
 
+## Backfilling and correcting
+
+- **Backfill several days at once** with `worklog add-batch --project "<P>" --file entries.json`
+  (or pipe the JSON array on stdin). It does ONE read-modify-write, so it's atomic. Each entry
+  is `{"date":"DD.MM.YYYY","hours":N,"text":"...","project":"..."}` (`project` optional if
+  `--project` given). Prefer this over a loop of `add` calls.
+- **Correcting a row uses `set`, not `add`.** `add` always *accumulates* onto a matching
+  date+project row — running it again doubles hours and appends duplicate text. To fix a
+  wrong row, overwrite it: `worklog set --project "<P>" --date DD.MM.YYYY --hours N --text "..."`
+  (single) or `worklog set --project "<P>" --file entries.json` (batch). `set` overwrites
+  hours+text instead of accumulating.
+- Before "re-adding" rows you think are missing, **dump the sheet first** (the rows for one
+  date can be interleaved across projects, so a row can look missing when it's just not
+  adjacent). Verify state, then decide `add` vs `set`.
+
 ## Notes
 
 - Hours are an **effort estimate**, not wall-clock. Round to 0.5, minimum 0.5.

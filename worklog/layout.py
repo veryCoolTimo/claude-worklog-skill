@@ -41,6 +41,21 @@ def upsert_entries(entries, date, hours, text, project):
     return "created"
 
 
+def set_entries(entries, date, hours, text, project):
+    """Overwrite (not accumulate) the hours+text for a date+project, or create it.
+
+    The idempotent counterpart to `upsert_entries`: use it to correct a row that
+    `add` got wrong (doubled hours, duplicated text) without piling on more.
+    """
+    for e in entries:
+        if e["date"] == date and e["project"] == project:
+            e["hours"] = round(float(hours), 2)
+            e["text"] = text
+            return "set"
+    entries.append({"date": date, "hours": float(hours), "text": text, "project": project})
+    return "created"
+
+
 def render(entries):
     out = [HEADERS[:]]
     ordered = sorted(entries, key=lambda e: (date_key(e["date"]), e["project"]))
@@ -68,3 +83,24 @@ def record(backend, date, hours, text, project):
     action = upsert_entries(entries, date, float(hours), text, project)
     backend.replace_all(render(entries))
     return action
+
+
+def record_many(backend, items, mode="add"):
+    """Atomic multi-entry write: read the sheet once, merge every entry, write once.
+
+    Each item is a dict with date/hours/text/project. Use this for backfilling
+    several days at once — a sequence of single `record` calls in separate
+    processes races against Sheets' eventual read-after-write consistency and
+    clobbers each other; one read-modify-write cannot.
+
+    mode="add" accumulates onto matching rows; mode="set" overwrites them. Returns
+    a list of (action, item) pairs in input order.
+    """
+    merge = set_entries if mode == "set" else upsert_entries
+    entries = parse_entries(backend.get_all_values())
+    actions = []
+    for it in items:
+        action = merge(entries, it["date"], float(it["hours"]), it["text"], it["project"])
+        actions.append((action, it))
+    backend.replace_all(render(entries))
+    return actions

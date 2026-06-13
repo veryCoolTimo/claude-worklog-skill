@@ -1,9 +1,11 @@
 import argparse
+import json
+import sys
 from pathlib import Path
 
 from worklog import config, store
 from worklog.dates import today_str, format_hours, parse_hours
-from worklog.layout import record, parse_entries
+from worklog.layout import record, record_many, parse_entries
 from worklog.project import resolve_project, init_project
 from worklog.sheets import open_worksheet
 
@@ -47,6 +49,101 @@ def cmd_add(args, cfg, backend, backend_factory):
     return 0
 
 
+def _load_batch_items(args, default_project):
+    raw = Path(args.file).read_text() if args.file else sys.stdin.read()
+    data = json.loads(raw)
+    if not isinstance(data, list):
+        raise ValueError("batch input must be a JSON array of entries")
+    items = []
+    for i, d in enumerate(data):
+        project = d.get("project") or default_project
+        if not project:
+            raise ValueError(f"entry {i}: no project (set one per-entry or pass --project)")
+        if not d.get("date") or d.get("hours") is None or not d.get("text"):
+            raise ValueError(f"entry {i}: each entry needs date, hours and text")
+        items.append({
+            "date": d["date"],
+            "hours": parse_hours(d["hours"]),
+            "text": d["text"],
+            "project": project,
+        })
+    return items
+
+
+def cmd_add_batch(args, cfg, backend, backend_factory):
+    """Add many entries in ONE read-modify-write. Safe for backfilling N days."""
+    default_project = _resolve(args.project, cfg)
+    try:
+        items = _load_batch_items(args, default_project)
+    except (ValueError, json.JSONDecodeError) as exc:
+        print(f"Bad batch input: {exc}")
+        return 1
+    if not items:
+        print("No entries to add.")
+        return 0
+
+    if args.dry_run:
+        for it in items:
+            print(f"[dry-run] {it['date']} | {format_hours(it['hours'])} | {it['text']} | {it['project']}")
+        return 0
+
+    try:
+        b = _get_backend(backend, backend_factory, cfg)
+    except Exception as exc:  # offline / no creds — never lose data
+        for it in items:
+            store.buffer_entry(it)
+        print(f"Could not reach Google Sheets ({exc}); buffered {len(items)} entries for later flush.")
+        return 0
+
+    for action, it in record_many(b, items):
+        print(f"{action}: {it['date']} | {format_hours(it['hours'])} | {it['text']} | {it['project']}")
+    return 0
+
+
+def cmd_set(args, cfg, backend, backend_factory):
+    """Overwrite (not accumulate) a row's hours+text — for correcting mistakes.
+
+    Single mode: --date/--hours/--text. Batch mode: --file/stdin JSON array.
+    """
+    default_project = _resolve(args.project, cfg)
+    if args.date is not None:  # single-entry mode
+        if not default_project:
+            print('No project resolved. Run `worklog init "<Project>"` or pass --project.')
+            return 1
+        if args.hours is None or args.text is None:
+            print("Single set needs --hours and --text (or use --file for batch).")
+            return 1
+        items = [{
+            "date": args.date, "hours": parse_hours(args.hours),
+            "text": args.text, "project": default_project,
+        }]
+    else:  # batch mode
+        try:
+            items = _load_batch_items(args, default_project)
+        except (ValueError, json.JSONDecodeError) as exc:
+            print(f"Bad batch input: {exc}")
+            return 1
+    if not items:
+        print("No entries to set.")
+        return 0
+
+    if args.dry_run:
+        for it in items:
+            print(f"[dry-run set] {it['date']} | {format_hours(it['hours'])} | {it['text']} | {it['project']}")
+        return 0
+
+    try:
+        b = _get_backend(backend, backend_factory, cfg)
+    except Exception as exc:
+        # `set` is a precise correction; buffering it as an add would re-double — don't.
+        print(f"Could not reach Google Sheets ({exc}); not buffered (set must run online).")
+        return 1
+
+    for action, it in record_many(b, items, mode="set"):
+        print(f"{action}: {it['date']} | {format_hours(it['hours'])} | {it['text']} | {it['project']}")
+    return 0
+
+
 def cmd_flush(args, cfg, backend, backend_factory):
     pending = store.read_pending()
     if not pending:
@@ -57,8 +154,11 @@ def cmd_flush(args, cfg, backend, backend_factory):
     except Exception as exc:
         print(f"Still cannot reach Google Sheets ({exc}); kept {len(pending)} buffered.")
         return 1
-    for e in pending:
-        record(b, e["date"], parse_hours(e["hours"]), e["text"], e["project"])
+    items = [
+        {"date": e["date"], "hours": parse_hours(e["hours"]), "text": e["text"], "project": e["project"]}
+        for e in pending
+    ]
+    record_many(b, items)
     store.clear_pending()
     print(f"Flushed {len(pending)} entr{'y' if len(pending) == 1 else 'ies'}.")
     return 0
@@ -101,6 +201,19 @@ def build_parser():
     pa.add_argument("--text", required=True)
     pa.add_argument("--date")
     pa.set_defaults(func=cmd_add)
+
+    pb = sub.add_parser("add-batch", parents=[common])
+    pb.add_argument("--project")
+    pb.add_argument("--file", help="JSON file with an array of entries; omit to read stdin")
+    pb.set_defaults(func=cmd_add_batch)
+
+    pset = sub.add_parser("set", parents=[common])
+    pset.add_argument("--project")
+    pset.add_argument("--date", help="single-entry mode; omit to read a JSON array from --file/stdin")
+    pset.add_argument("--hours")
+    pset.add_argument("--text")
+    pset.add_argument("--file", help="JSON file with an array of entries for batch set")
+    pset.set_defaults(func=cmd_set)
 
     pi = sub.add_parser("init", parents=[common])
     pi.add_argument("name")

@@ -1,6 +1,79 @@
+import json
+
 from worklog import cli, store
 from worklog.layout import parse_entries
 from worklog.sheets import FakeBackend
+
+
+def test_add_batch_writes_all_entries_atomically(worklog_home, capsys, monkeypatch):
+    backend = FakeBackend()
+    payload = json.dumps([
+        {"date": "02.05.2026", "hours": 2, "text": "a"},
+        {"date": "04.05.2026", "hours": 3, "text": "b"},
+        {"date": "07.05.2026", "hours": "1.5", "text": "c"},
+    ])
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(payload))
+    rc = cli.main(["add-batch", "--project", "Golos CRM"], backend=backend)
+    assert rc == 0
+    entries = parse_entries(backend.get_all_values())
+    assert {e["date"] for e in entries} == {"02.05.2026", "04.05.2026", "07.05.2026"}
+    assert all(e["project"] == "Golos CRM" for e in entries)
+
+
+def test_add_batch_dry_run_does_not_write(worklog_home, capsys, monkeypatch):
+    backend = FakeBackend()
+    payload = json.dumps([{"date": "02.05.2026", "hours": 2, "text": "a", "project": "P"}])
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(payload))
+    rc = cli.main(["add-batch", "--dry-run"], backend=backend)
+    assert rc == 0
+    assert backend.get_all_values() == [["Date", "Hours", "What I did", "Project"]]
+    assert "dry-run" in capsys.readouterr().out
+
+
+def test_set_single_overwrites_existing_row(worklog_home, capsys):
+    backend = FakeBackend()
+    cli.main(["add", "--project", "P", "--hours", "4", "--text", "dup; dup",
+              "--date", "02.05.2026"], backend=backend)
+    rc = cli.main(["set", "--project", "P", "--hours", "2", "--text", "clean",
+                   "--date", "02.05.2026"], backend=backend)
+    assert rc == 0
+    entries = parse_entries(backend.get_all_values())
+    assert len(entries) == 1
+    assert entries[0]["hours"] == 2.0 and entries[0]["text"] == "clean"
+    assert "set" in capsys.readouterr().out
+
+
+def test_set_batch_repairs_many_rows(worklog_home, capsys, monkeypatch):
+    backend = FakeBackend()
+    cli.main(["add", "--project", "Golos CRM", "--hours", "4", "--text", "a; a",
+              "--date", "02.05.2026"], backend=backend)
+    cli.main(["add", "--project", "Golos CRM", "--hours", "6", "--text", "b; b",
+              "--date", "04.05.2026"], backend=backend)
+    payload = json.dumps([
+        {"date": "02.05.2026", "hours": 2, "text": "a"},
+        {"date": "04.05.2026", "hours": 3, "text": "b"},
+    ])
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(payload))
+    rc = cli.main(["set", "--project", "Golos CRM"], backend=backend)
+    assert rc == 0
+    by_date = {e["date"]: e for e in parse_entries(backend.get_all_values())}
+    assert by_date["02.05.2026"]["hours"] == 2.0 and by_date["02.05.2026"]["text"] == "a"
+    assert by_date["04.05.2026"]["hours"] == 3.0 and by_date["04.05.2026"]["text"] == "b"
+
+
+def test_add_batch_buffers_all_when_backend_fails(worklog_home, capsys, monkeypatch):
+    def boom(cfg=None):
+        raise RuntimeError("no network")
+
+    payload = json.dumps([
+        {"date": "02.05.2026", "hours": 2, "text": "a", "project": "P"},
+        {"date": "04.05.2026", "hours": 3, "text": "b", "project": "P"},
+    ])
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(payload))
+    rc = cli.main(["add-batch"], backend_factory=boom)
+    assert rc == 0
+    assert len(store.read_pending()) == 2
+    assert "buffered" in capsys.readouterr().out.lower()
 
 
 def test_add_creates_formatted_sheet(worklog_home, capsys):
